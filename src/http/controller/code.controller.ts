@@ -10,12 +10,21 @@ const LANGUAGE_MAP: Record<string, any> = {
   cpp: 54,
   python: 71
 };
-
+function withTimeout<T>(promise: Promise<T>, ms = 8000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Judge0 timeout")), ms)
+    ),
+  ]) as Promise<T>;
+}
 export const codeRunHandler = async(req:Request,res:Response)=>{
-  const { code, language, input, expectedOutput } = req.body;
-  if (!code || !language) {
-    return res.status(400).json({ error: "Code and language are required" });
-  }
+  try{
+
+    const { code, language, input, expectedOutput } = req.body;
+    if (!code || !language) {
+      return res.status(400).json({ error: "Code and language are required" });
+    }
 
   const finalCode = wrapJavaScriptCode(code, input || "");
   const token = await submitToJudge0(
@@ -23,7 +32,7 @@ export const codeRunHandler = async(req:Request,res:Response)=>{
     LANGUAGE_MAP[language] || 63,
     input || ""
   );
-  const result = await pollResult(token);
+  const result = await withTimeout(pollResult(token),8000);
   const output = result.stdout || "";
   const passed = expectedOutput 
     ? normalize(output) === normalize(expectedOutput)
@@ -37,10 +46,15 @@ export const codeRunHandler = async(req:Request,res:Response)=>{
     compileError: result.compile_output,
     runtimeError: result.stderr
   });
+} catch (error) {
+    console.error("codeRunHandler error:", error);
+    res.status(500).json({ error: "Code execution failed" });
+  }
 }
 
 
 export const submissionHandler = async(req:Request,res:Response)=>{
+  try {
   const { code, language, input } = req.body;
   const userId = req.user?.id;
 
@@ -55,7 +69,7 @@ export const submissionHandler = async(req:Request,res:Response)=>{
     input || ""
   );
 
-  const result = await pollResult(token);
+  const result = await withTimeout(pollResult(token),8000);
 
   // Save submission to database
   if (userId) {
@@ -72,4 +86,8 @@ export const submissionHandler = async(req:Request,res:Response)=>{
     compileError: result.compile_output,
     runtimeError: result.stderr
   });
+  } catch (error) {
+     console.error("codeSubmissionHandler error:", error);
+    res.status(500).json({ error: "Code submission failed" });
+  }
 }
