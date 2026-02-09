@@ -77,7 +77,23 @@ export function setupWebSocket(server: http.Server) {
     if (connectionType === "yjs") {
       console.log("🟢 Yjs connection detected for room:", roomId);
       const docName = `yjs-${roomId}`;
-      setupWSConnection(ws, request, { docName });
+      
+      // Add error handler for Yjs connections
+      ws.on("error", (err) => {
+        console.error("❌ Yjs WebSocket error:", err);
+      });
+      
+      ws.on("close", (code, reason) => {
+        console.log(`🔴 Yjs connection closed: code=${code}, reason=${reason?.toString()}`);
+      });
+      
+      try {
+        setupWSConnection(ws, request, { docName });
+        console.log("✅ Yjs setupWSConnection completed for:", docName);
+      } catch (err) {
+        console.error("❌ Error in setupWSConnection:", err);
+        ws.close(1011, "Internal server error");
+      }
       return;
     }
 
